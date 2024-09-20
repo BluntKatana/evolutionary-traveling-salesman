@@ -12,12 +12,14 @@ const POINT_RADIUS = 10;
 export class TSVisualizer {
   static draw(
     ctx: CanvasRenderingContext2D,
-    { points, edges }: { points: Point[]; edges: Edge[] }
+    { points, edges }: { points: Point[]; edges: Edge[] },
+    theme: string | undefined
   ) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-    ctx.strokeStyle = "white";
-    ctx.fillStyle = "white";
+    // set to --foreground css variable
+    ctx.strokeStyle = theme === "dark" ? "white" : "black";
+    ctx.fillStyle = theme === "dark" ? "white" : "black";
     ctx.lineWidth = LINE_WIDTH;
 
     this.drawPoints(ctx, points);

@@ -1,30 +1,48 @@
-import { getEuclideanDist, Point, randomPoints, toKey } from "./point";
+import {
+  getEuclideanDist,
+  getManhattanDist,
+  Point,
+  shufflePoints,
+  toKey,
+} from "./point";
 
-export function computeDistance(route: Point[]): number {
+export function computeDistance(
+  route: Point[],
+  type: TSPConfig["distance_function"]
+): number {
   if (route.length < 2) {
     return 0;
   }
 
+  const distanceFunc: Record<
+    TSPConfig["distance_function"],
+    (a: Point, b: Point) => number
+  > = {
+    euclidean: getEuclideanDist,
+    manhattan: getManhattanDist,
+  };
+
   let distance = 0;
   for (let i = 0; i < route.length - 2; i++) {
-    distance += getEuclideanDist(route[i], route[i + 1]);
+    distance += distanceFunc[type](route[i], route[i + 1]);
   }
 
   // Add the distance from the last point to the first point
-  distance += getEuclideanDist(route[route.length - 1], route[0]);
+  distance += distanceFunc[type](route[route.length - 1], route[0]);
 
   return distance;
 }
 
 export function fittestSolutionTSP(
-  distFunction: (route: Point[]) => number,
-  generation: Point[][]
+  distFunction: typeof computeDistance,
+  generation: Point[][],
+  distance_function: TSPConfig["distance_function"]
 ): [number, Point[]] {
   let bestFitness = Number.MAX_SAFE_INTEGER;
   let bestFitnessIndividual: Point[] = [];
 
   for (const individual of generation) {
-    const fitnessIndividual = distFunction(individual);
+    const fitnessIndividual = distFunction(individual, distance_function);
     if (fitnessIndividual < bestFitness) {
       bestFitness = fitnessIndividual;
       bestFitnessIndividual = individual;
@@ -36,11 +54,13 @@ export function fittestSolutionTSP(
 
 export function initializePopulation(
   n_population: number,
-  n_points: number
+  points: Point[]
 ): Point[][] {
   const population = [];
   for (let i = 0; i < n_population; i++) {
-    population.push(randomPoints(n_points));
+    // Shuffle the points
+    const shuffledPoints = shufflePoints(points);
+    population.push(shuffledPoints);
   }
 
   return population;
@@ -159,8 +179,9 @@ function crossover(
 
 function tournament_selection(
   generation: Point[][],
-  distanceFunction: (route: Point[]) => number,
-  tournament_size: number
+  distanceFunction: typeof computeDistance,
+  tournament_size: number,
+  distance_function: TSPConfig["distance_function"]
 ): number {
   const participants: Set<number> = new Set();
 
@@ -169,7 +190,7 @@ function tournament_selection(
   }
 
   const fitnessValues = Array.from(participants).map((i) =>
-    distanceFunction(generation[i])
+    distanceFunction(generation[i], distance_function)
   );
 
   return Array.from(participants)[
@@ -179,20 +200,26 @@ function tournament_selection(
 
 export type TSPConfig = {
   n_population: number;
+  n_points: number;
   p_mutation: number;
   p_crossover: number;
   n_iter: number;
   tournament_size: number;
   number_of_children: number;
+  distance_function: "euclidean" | "manhattan";
+  speed: number;
 };
 
 export const DEFAULT_CONFIG: TSPConfig = {
   n_population: 100,
+  n_points: 10,
   p_mutation: 0.2,
   p_crossover: 0.8,
   n_iter: 1000,
   tournament_size: 10,
   number_of_children: 2,
+  distance_function: "euclidean",
+  speed: 60,
 };
 
 export function runStep(config: TSPConfig, generation: Point[][]) {
@@ -209,7 +236,8 @@ export function runStep(config: TSPConfig, generation: Point[][]) {
       const mate = tournament_selection(
         generation,
         computeDistance,
-        config.tournament_size
+        config.tournament_size,
+        config.distance_function
       );
       mating_pool.push(mate);
     }
@@ -231,66 +259,69 @@ export function runStep(config: TSPConfig, generation: Point[][]) {
   return new_generation;
 }
 
-export function run(config: TSPConfig) {
-  const number_of_parents = config.n_population / config.number_of_children;
+// export function run(config: TSPConfig) {
+//   const number_of_parents = config.n_population / config.number_of_children;
 
-  // initialize the generation
-  let generation = initializePopulation(config.n_population, 10);
+//   // initialize the generation
+//   let generation = initializePopulation(config.n_population);
 
-  // compute the current best solution
-  let [best_fit_old, best_ind_old] = fittestSolutionTSP(
-    computeDistance,
-    generation
-  );
+//   // compute the current best solution
+//   let [best_fit_old, best_ind_old] = fittestSolutionTSP(
+//     computeDistance,
+//     generation,
+//     config.distance_function
+//   );
 
-  if (config.n_population > 100) {
-    throw new Error("Population size is greater then 100");
-  } else if (config.n_iter > 1000) {
-    throw new Error("Number of iterations is greater then 1000");
-  }
+//   if (config.n_population > 100) {
+//     throw new Error("Population size is greater then 100");
+//   } else if (config.n_iter > 1000) {
+//     throw new Error("Number of iterations is greater then 1000");
+//   }
 
-  for (let i = 1; i < config.n_iter; i += 1) {
-    // initialize the list of new generation
-    const new_generation = [];
+//   for (let i = 1; i < config.n_iter; i += 1) {
+//     // initialize the list of new generation
+//     const new_generation = [];
 
-    // loop over number of parent pairs we need to get
-    for (let j = 0; j < number_of_parents; j += 1) {
-      const mating_pool = [];
-      for (let k = 0; k < config.number_of_children; k += 1) {
-        const mate = tournament_selection(
-          generation,
-          computeDistance,
-          config.tournament_size
-        );
-        mating_pool.push(mate);
-      }
+//     // loop over number of parent pairs we need to get
+//     for (let j = 0; j < number_of_parents; j += 1) {
+//       const mating_pool = [];
+//       for (let k = 0; k < config.number_of_children; k += 1) {
+//         const mate = tournament_selection(
+//           generation,
+//           computeDistance,
+//           config.tournament_size,
+//           config.distance_function
+//         );
+//         mating_pool.push(mate);
+//       }
 
-      let [child1, child2] = [
-        generation[mating_pool[0]],
-        generation[mating_pool[1]],
-      ];
+//       let [child1, child2] = [
+//         generation[mating_pool[0]],
+//         generation[mating_pool[1]],
+//       ];
 
-      [child1, child2] = crossover(child1, child2, config.p_crossover);
+//       [child1, child2] = crossover(child1, child2, config.p_crossover);
 
-      child1 = mutation(child1, config.p_mutation);
-      child2 = mutation(child2, config.p_mutation);
+//       child1 = mutation(child1, config.p_mutation);
+//       child2 = mutation(child2, config.p_mutation);
 
-      new_generation.push(child1);
-      new_generation.push(child2);
-    }
+//       new_generation.push(child1);
+//       new_generation.push(child2);
+//     }
 
-    generation = new_generation;
+//     generation = new_generation;
 
-    const [best_fit_new, best_ind_new] = fittestSolutionTSP(
-      computeDistance,
-      generation
-    );
+//     const [best_fit_new, best_ind_new] = fittestSolutionTSP(
+//       computeDistance,
+//       generation,
+//       config.distance_function
+//     );
 
-    if (best_fit_new < best_fit_old) {
-      best_fit_old = best_fit_new;
-      best_ind_old = best_ind_new;
-    }
+//     if (best_fit_new < best_fit_old) {
+//       best_fit_old = best_fit_new;
+//       best_ind_old = best_ind_new;
+//     }
 
-    console.log(`Best distance: ${best_fit_old} ${best_ind_old}`);
-  }
-}
+//     console.log(`Best distance: ${best_fit_old} ${best_ind_old}`);
+//   }
+// }
